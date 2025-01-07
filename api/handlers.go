@@ -8,36 +8,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func (s *ApiServer) handleOrders(w http.ResponseWriter, r *http.Request) {
-	var order struct {
-		CustomerID int    `json:"customer_id"`
-		OrderDate  string `json:"order_date"`
-		DueDate    string `json:"shipment_due"`
-		Items      []struct {
-			Name  string  `json:"name"`
-			Size  *string `json:"size"`
-			Color *string `json:"color"`
-			Price float64 `json:"price"`
-		} `json:"items"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&order); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		return
-	}
-	orderID, err := s.Store.CreateOrder(order.CustomerID, order.OrderDate, order.DueDate)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error creating order: %v", err), http.StatusInternalServerError)
-		return
-	}
-	for _, item := range order.Items {
-		if err := s.Store.AddItemToOrder(orderID, item.Name, item.Size, item.Color, item.Price); err != nil {
-			http.Error(w, fmt.Sprintf("Error adding item: %v", err), http.StatusInternalServerError)
-			return
-		}
-	}
-	json.NewEncoder(w).Encode(map[string]int{"order_id": orderID})
-}
-
 func (s *ApiServer) handleShipments(w http.ResponseWriter, r *http.Request) {
 	var shipment struct {
 		OrderID int   `json:"order_id"`

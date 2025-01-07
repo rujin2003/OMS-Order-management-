@@ -27,9 +27,12 @@ func (s *ApiServer) Start() {
 	router.HandleFunc("/customers", s.getAllCustomers).Methods("GET")
 	router.HandleFunc("/customers/{id:[0-9]+}", s.getCustomerByID).Methods("GET")
 
-	//MARK:Shipment
+	//MARK:Order
 
 	router.HandleFunc("/orders", s.handleOrders).Methods("POST")
+	router.HandleFunc("/orders/{id}", s.handleGetOrderByID).Methods("GET")
+	router.HandleFunc("/orders", s.handleGetAllOrders).Methods("GET")
+
 	router.HandleFunc("/shipments", s.handleShipments).Methods("POST")
 	router.HandleFunc("/order-history/{name}", s.handleOrderHistoryByName).Methods("GET")
 	router.HandleFunc("/shipment-history/{name}", s.handleShipmentHistoryByName).Methods("GET")
