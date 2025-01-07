@@ -10,7 +10,7 @@ type Storage interface {
 
 	AddItemToOrder(orderID int, name string, size, color *string, price float64, quantity int) error
 	CreateShipment(orderID int, items []int) error
-	GetOrderHistoryByName(customerName string) ([]models.Order, error)
+	GetOrderHistoryByCustomerName(customerName string) ([]models.Order, error)
 	GetShipmentHistoryByName(customerName string) ([]models.Shipment, error)
 	GetCustomerByID(id string) (*models.Customer, error)
 	GetAllCustomers() ([]models.Customer, error)

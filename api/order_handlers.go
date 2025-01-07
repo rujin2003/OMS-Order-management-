@@ -75,3 +75,19 @@ func (s *ApiServer) handleGetAllOrders(w http.ResponseWriter, r *http.Request) {
 
 	json.NewEncoder(w).Encode(orders)
 }
+func (s *ApiServer) handleGetOrderHistoryByCustomerName(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	customerName, ok := vars["name"]
+	if !ok || customerName == "" {
+		http.Error(w, "Customer name is required", http.StatusBadRequest)
+		return
+	}
+
+	orders, err := s.Store.GetOrderHistoryByCustomerName(customerName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error retrieving orders: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(orders)
+}

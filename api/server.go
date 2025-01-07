@@ -32,9 +32,10 @@ func (s *ApiServer) Start() {
 	router.HandleFunc("/orders", s.handleOrders).Methods("POST")
 	router.HandleFunc("/orders/{id}", s.handleGetOrderByID).Methods("GET")
 	router.HandleFunc("/orders", s.handleGetAllOrders).Methods("GET")
+	router.HandleFunc("/orders/history/{name}", s.handleGetOrderHistoryByCustomerName).Methods("GET")
 
 	router.HandleFunc("/shipments", s.handleShipments).Methods("POST")
-	router.HandleFunc("/order-history/{name}", s.handleOrderHistoryByName).Methods("GET")
+	router.HandleFunc("/order-history/{name}", s.handleGetOrderHistoryByCustomerName).Methods("GET")
 	router.HandleFunc("/shipment-history/{name}", s.handleShipmentHistoryByName).Methods("GET")
 
 	fmt.Printf("Server starting on %s...\n", s.Address)

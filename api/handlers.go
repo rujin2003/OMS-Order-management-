@@ -24,16 +24,6 @@ func (s *ApiServer) handleShipments(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "shipment created"})
 }
 
-func (s *ApiServer) handleOrderHistoryByName(w http.ResponseWriter, r *http.Request) {
-	name := mux.Vars(r)["name"]
-	history, err := s.Store.GetOrderHistoryByName(name)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error retrieving order history: %v", err), http.StatusInternalServerError)
-		return
-	}
-	json.NewEncoder(w).Encode(history)
-}
-
 func (s *ApiServer) handleShipmentHistoryByName(w http.ResponseWriter, r *http.Request) {
 	name := mux.Vars(r)["name"]
 	history, err := s.Store.GetShipmentHistoryByName(name)
