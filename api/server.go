@@ -31,12 +31,17 @@ func (s *ApiServer) Start() {
 
 	router.HandleFunc("/orders", s.handleOrders).Methods("POST")
 	router.HandleFunc("/orders/{id}", s.handleGetOrderByID).Methods("GET")
+
 	router.HandleFunc("/orders", s.handleGetAllOrders).Methods("GET")
-	router.HandleFunc("/orders/history/{name}", s.handleGetOrderHistoryByCustomerName).Methods("GET")
+
 	router.HandleFunc("update_order_status", s.UpdateOrderStatusHandler).Methods("POST")
 	router.HandleFunc("/orders", s.handleDeleteOrders).Methods("DELETE")
+
 	router.HandleFunc("/orders/total-value/{customer_name}", s.handleOrderCountByCustomerName).Methods("GET")
-	router.HandleFunc("/orders/history/{customer_name}", s.handleGetOrderHistoryByCustomerName).Methods("GET")
+
+	router.HandleFunc("/orders/history/{customer_name}", s.handleGetAllOrdersByCustumerName).Methods("GET")
+	router.HandleFunc("/orders/{customer_name}", s.handleTotalOrderValueByCustomerName).Methods("GET")
+
 	router.HandleFunc("/orders/{pending-count}", s.handlePendingOrderCount).Methods("GET")
 
 	//MARK:Shipmemnt

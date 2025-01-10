@@ -199,7 +199,6 @@ func (s *PostgresStorage) UpdateOrderStatus(orderID int, status string) error {
 	return err
 }
 
-
 func (s *PostgresStorage) DeleteOrder(order int) error {
 	query := `DELETE FROM order WHERE id = $1`
 	_, err := s.DB.Exec(query, order)

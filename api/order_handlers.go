@@ -53,7 +53,8 @@ func (s *ApiServer) handleGetOrderByID(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(order)
 }
 
-func (s *ApiServer) handleGetAllOrders(w http.ResponseWriter, r *http.Request) {
+func (s *ApiServer) handleGetAllOrdersByCustumerName(w http.ResponseWriter, r *http.Request) {
+
 	customerName := r.URL.Query().Get("customer_name")
 	if customerName == "" {
 		http.Error(w, "Customer name is required", http.StatusBadRequest)
@@ -63,17 +64,6 @@ func (s *ApiServer) handleGetAllOrders(w http.ResponseWriter, r *http.Request) {
 	orders, err := s.Store.GetOrderHistoryByCustomerName(customerName)
 	if err != nil {
 		http.Error(w, "Failed to fetch order history", http.StatusInternalServerError)
-		return
-	}
-
-	json.NewEncoder(w).Encode(orders)
-}
-
-// GetAllOrdersHandler fetches all orders
-func (s *ApiServer) handleGetOrderHistoryByCustomerName(w http.ResponseWriter, r *http.Request) {
-	orders, err := s.Store.GetAllOrders()
-	if err != nil {
-		http.Error(w, "Failed to fetch orders", http.StatusInternalServerError)
 		return
 	}
 
