@@ -11,6 +11,11 @@ type PostgresStorage struct {
 	DB *sql.DB
 }
 
+// AddItemToOrder implements Storage.
+func (s *PostgresStorage) AddItemToOrder(orderID int, name string, size *string, color *string, price float64, quantity int) error {
+	panic("unimplemented")
+}
+
 func (s *PostgresStorage) CreateShipment(orderID int, itemIDs []int) error {
 	_, err := s.DB.Exec("INSERT INTO shipments (order_id, shipped_date, item_ids) VALUES ($1, CURRENT_DATE, $2)", orderID, itemIDs)
 	if err != nil {
@@ -123,3 +128,4 @@ func (s *PostgresStorage) GetShipmentHistoryByName(name string) ([]models.Shipme
 func (s *PostgresStorage) Close() {
 	s.DB.Close()
 }
+

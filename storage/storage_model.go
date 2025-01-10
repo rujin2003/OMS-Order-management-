@@ -6,7 +6,7 @@ import (
 
 type Storage interface {
 	CreateCustomer(name string, number int, email string, country string, address string) (int, error)
-	CreateOrder(customerID int, customerName, orderDate, shipmentDue, shipmentAddress string) (int, error)
+	CreateOrder(customerID int, customerName, orderDate, shipmentDue, shipmentAddress string, orderStatu string) (int, error)
 
 	AddItemToOrder(orderID int, name string, size, color *string, price float64, quantity int) error
 	CreateShipment(orderID int, items []int) error
@@ -16,4 +16,12 @@ type Storage interface {
 	GetAllCustomers() ([]models.Customer, error)
 	GetOrderByID(orderID int) (*models.Order, error)
 	GetAllOrders() ([]models.Order, error)
+	UpdateOrderStatus(orderID int, status string) error
+	DeleteOrder(order int) error
+	GetTotalOrderValueByCustomerName(customerName string) (float64, error)
+	GetOrderCountByCustomerName(customerName string) (int, error)
+	GetPendingOrderCount() (int, error)
+	
+
+
 }

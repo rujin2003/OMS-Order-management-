@@ -7,10 +7,13 @@ type Order struct {
 	OrderDate       string  `json:"order_date"`
 	ShipmentDue     string  `json:"shipment_due"`
 	ShipmentAddress string  `json:"shipment_address"`
+	OrderStatus     string  `json:"order_status"`
 	Items           []Item  `json:"items"`
 	TotalPrice      float64 `json:"total_price"`
 	NoOfItems       int     `json:"no_of_items"`
 }
+
+
 
 type Item struct {
 	ID       int     `json:"id"`
@@ -20,4 +23,5 @@ type Item struct {
 	Price    float64 `json:"price"`
 	Quantity int     `json:"quantity"`
 	Shipped  bool    `json:"shipped"`
+	Ola 	string  `json:"ola"`	
 }

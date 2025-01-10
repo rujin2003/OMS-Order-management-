@@ -6,3 +6,5 @@ type Shipment struct {
 	OrderID     int    `json:"order_id"`
 	Items       []int  `json:"items"`
 }
+
+

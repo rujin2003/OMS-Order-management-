@@ -7,4 +7,5 @@ type Customer struct {
 	Email   string `json:"email"`
 	Country string `json:"country"`
 	Address string `json:"address"`
+	
 }
