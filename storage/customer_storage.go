@@ -7,15 +7,6 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func NewPostgresStorage() (*PostgresStorage, error) {
-	psqlInfo := "host=localhost port=5432 user=postgres password=password dbname=order_management sslmode=disable"
-	db, err := sql.Open("postgres", psqlInfo)
-	if err != nil {
-		return nil, err
-	}
-	return &PostgresStorage{DB: db}, nil
-}
-
 func (s *PostgresStorage) EditCustumerDetails(customer models.Customer) error {
 	query := `UPDATE customers
 			  SET name = $1, number = $2, email = $3, country = $4, address = $5

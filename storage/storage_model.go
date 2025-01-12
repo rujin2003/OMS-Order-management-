@@ -9,8 +9,6 @@ type Storage interface {
 
 	EditCustumerDetails(custumer models.Customer) error
 
-	CreateShipment(orderID int, items []int) error
-	GetShipmentHistoryByName(customerName string) ([]models.Shipment, error)
 	GetCustomerByID(id string) (*models.Customer, error)
 	GetAllCustomers() ([]models.Customer, error)
 	CountCustumer() (int, error)
@@ -25,4 +23,11 @@ type Storage interface {
 	GetTotalOrderValueByCustomerName(customerName string) (float64, error)
 	GetOrderCountByCustomerName(customerName string) (int, error)
 	GetPendingOrderCount() (int, error)
+
+	//Shipement
+	DeleteShipment(shipmentID int) error
+	HandleShipment(shipment models.Shipment) error
+	GetAllShipments() ([]models.Shipment, error)
+	GetCompletedShipments() ([]models.Shipment, error)
+	GetShippedButPendingShipments() ([]models.Shipment, error)
 }

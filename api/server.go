@@ -45,9 +45,11 @@ func (s *ApiServer) Start() {
 	router.HandleFunc("/orders/count/{customer_name}", s.handleOrderCountByCustomerName).Methods("GET")
 
 	//MARK:Shipmemnt
-
-	router.HandleFunc("/shipments", s.handleShipments).Methods("POST")
-	router.HandleFunc("/shipment-history/{name}", s.handleShipmentHistoryByName).Methods("GET")
+	router.HandleFunc("/shipments", s.handlePostShipment).Methods("POST")
+	router.HandleFunc("/shipments", s.handleGetAllShipments).Methods("GET")
+	router.HandleFunc("/shipments/completed", s.handleGetCompletedShipments).Methods("GET")
+	router.HandleFunc("/shipments/shipped-pending", s.handleGetShippedButPendingShipments).Methods("GET")
+	router.HandleFunc("/shipments/{id}", s.handleDeleteShipment).Methods("DELETE")
 
 	fmt.Printf("Server starting on %s...\n", s.Address)
 	if err := http.ListenAndServe(s.Address, router); err != nil {
