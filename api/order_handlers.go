@@ -3,6 +3,7 @@ package api
 import (
 	"AAHAOMS/OMS/models"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -10,35 +11,26 @@ import (
 )
 
 // CreateOrderHandler handles order creation
-func (s *ApiServer) handleOrders(w http.ResponseWriter, r *http.Request) {
+func (s *ApiServer) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 	var order models.Order
-	err := json.NewDecoder(r.Body).Decode(&order)
-	if err != nil {
+
+	if err := json.NewDecoder(r.Body).Decode(&order); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	orderID, err := s.Store.CreateOrder(order.CustomerID, order.CustomerName, order.OrderDate, order.ShipmentDue, order.ShipmentAddress, "pending")
+	orderID, err := s.Store.CreateOrder(order)
 	if err != nil {
-		http.Error(w, "Failed to create order", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Error creating order: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	response := map[string]interface{}{
-		"order_id":         orderID,
-		"customer_id":      order.CustomerID,
-		"customer_name":    order.CustomerName,
-		"order_date":       order.OrderDate,
-		"shipment_due":     order.ShipmentDue,
-		"shipment_address": order.ShipmentAddress,
-		"order_status":     "Pending",
-	}
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(map[string]int{"order_id": orderID})
 }
 
 func (s *ApiServer) handleGetOrderByID(w http.ResponseWriter, r *http.Request) {
-	orderIDStr := r.URL.Query().Get("id")
-	orderID, err := strconv.Atoi(orderIDStr)
+	vars := mux.Vars(r)
+	orderID, err := strconv.Atoi(vars["id"])
 	if err != nil {
 		http.Error(w, "Invalid order ID", http.StatusBadRequest)
 		return
@@ -46,15 +38,14 @@ func (s *ApiServer) handleGetOrderByID(w http.ResponseWriter, r *http.Request) {
 
 	order, err := s.Store.GetOrderByID(orderID)
 	if err != nil {
-		http.Error(w, "Order not found", http.StatusNotFound)
+		http.Error(w, fmt.Sprintf("Error fetching order: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	json.NewEncoder(w).Encode(order)
 }
 
-func (s *ApiServer) handleGetAllOrdersByCustumerName(w http.ResponseWriter, r *http.Request) {
-
+func (s *ApiServer) handleGetOrderHistoryByCustomerName(w http.ResponseWriter, r *http.Request) {
 	customerName := r.URL.Query().Get("customer_name")
 	if customerName == "" {
 		http.Error(w, "Customer name is required", http.StatusBadRequest)
@@ -63,7 +54,16 @@ func (s *ApiServer) handleGetAllOrdersByCustumerName(w http.ResponseWriter, r *h
 
 	orders, err := s.Store.GetOrderHistoryByCustomerName(customerName)
 	if err != nil {
-		http.Error(w, "Failed to fetch order history", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Error fetching order history: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(orders)
+}
+func (s *ApiServer) handleGetAllOrders(w http.ResponseWriter, r *http.Request) {
+	orders, err := s.Store.GetAllOrders()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error fetching orders: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -72,20 +72,22 @@ func (s *ApiServer) handleGetAllOrdersByCustumerName(w http.ResponseWriter, r *h
 
 func (s *ApiServer) UpdateOrderStatusHandler(w http.ResponseWriter, r *http.Request) {
 
-	var payload struct {
-		OrderID int    `json:"order_id"`
-		Status  string `json:"status"`
+	vars := mux.Vars(r)
+	orderID, err := strconv.Atoi(vars["id"])
+	if err != nil || orderID <= 0 {
+		http.Error(w, "Invalid order ID", http.StatusBadRequest)
+		return
 	}
 
-	// Decode the JSON request body
-	err := json.NewDecoder(r.Body).Decode(&payload)
-	if err != nil || payload.OrderID <= 0 || payload.Status == "" {
+	var payload struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || payload.Status == "" {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	// Update the order status in the database
-	err = s.Store.UpdateOrderStatus(payload.OrderID, payload.Status)
+	err = s.Store.UpdateOrderStatus(orderID, payload.Status)
 	if err != nil {
 		http.Error(w, "Failed to update order status", http.StatusInternalServerError)
 		return
@@ -97,27 +99,22 @@ func (s *ApiServer) UpdateOrderStatusHandler(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-func (s *ApiServer) handleDeleteOrders(w http.ResponseWriter, r *http.Request) {
-	var payload struct {
-		OrderID int `json:"order_id"`
-	}
-
-	err := json.NewDecoder(r.Body).Decode(&payload)
-	if err != nil || payload.OrderID <= 0 {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+func (s *ApiServer) handleDeleteOrder(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	orderID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid order ID", http.StatusBadRequest)
 		return
 	}
 
-	err = s.Store.DeleteOrder(payload.OrderID)
+	err = s.Store.DeleteOrder(orderID)
 	if err != nil {
-		http.Error(w, "Failed to delete order", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Error deleting order: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Order deleted successfully",
-	})
+	json.NewEncoder(w).Encode(map[string]string{"message": "Order deleted successfully"})
 }
 
 func (s *ApiServer) handleTotalOrderValueByCustomerName(w http.ResponseWriter, r *http.Request) {

@@ -4,27 +4,39 @@ import (
 	"AAHAOMS/OMS/models"
 )
 
-func (s *PostgresStorage) CreateOrder(customerID int, customerName, orderDate, shipmentDue, shipmentAddress, orderStatus string) (int, error) {
-	query := `
-		INSERT INTO orders (customer_id, customer_name, order_date, shipment_due, shipment_address, order_status)
-		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
-	`
+func (s *PostgresStorage) CreateOrder(order models.Order) (int, error) {
 	var orderID int
-	err := s.DB.QueryRow(query, customerID, customerName, orderDate, shipmentDue, shipmentAddress, orderStatus).Scan(&orderID)
-	return orderID, err
+	query := `
+		INSERT INTO orders (customer_id, customer_name, order_date, shipment_due, shipment_address, order_status, total_price, no_of_items)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id
+	`
+	err := s.DB.QueryRow(query, order.CustomerID, order.CustomerName, order.OrderDate, order.ShipmentDue, order.ShipmentAddress, order.OrderStatus, order.TotalPrice, order.NoOfItems).Scan(&orderID)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, item := range order.Items {
+		query = `
+			INSERT INTO order_items (order_id, name, size, color, price, quantity)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`
+		_, err = s.DB.Exec(query, orderID, item.Name, item.Size, item.Color, item.Price, item.Quantity)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	return orderID, nil
 }
 
-func (s *PostgresStorage) GetOrderHistoryByCustomerName(customerName string) ([]models.Order, error) {
+func (s *PostgresStorage) GetOrderHistoryByCustomerName(name string) ([]models.Order, error) {
 	query := `
-		SELECT o.id, o.customer_id, o.customer_name, o.order_date, o.shipment_due, o.shipment_address, o.order_status,
-		       COALESCE(SUM(i.price * i.quantity), 0) AS total_price, COUNT(i.id) AS no_of_items
-		FROM orders o
-		LEFT JOIN items i ON o.id = i.order_id
-		WHERE o.customer_name ILIKE $1
-		GROUP BY o.id
-		ORDER BY o.order_date DESC
+		SELECT id, customer_id, customer_name, order_date, shipment_due, shipment_address, order_status, total_price, no_of_items
+		FROM orders
+		WHERE customer_name = $1
 	`
-	rows, err := s.DB.Query(query, "%"+customerName+"%")
+	rows, err := s.DB.Query(query, name)
 	if err != nil {
 		return nil, err
 	}
@@ -33,28 +45,18 @@ func (s *PostgresStorage) GetOrderHistoryByCustomerName(customerName string) ([]
 	var orders []models.Order
 	for rows.Next() {
 		var order models.Order
-		err := rows.Scan(
-			&order.ID,
-			&order.CustomerID,
-			&order.CustomerName,
-			&order.OrderDate,
-			&order.ShipmentDue,
-			&order.ShipmentAddress,
-			&order.OrderStatus,
-			&order.TotalPrice,
-			&order.NoOfItems,
-		)
+		err = rows.Scan(&order.ID, &order.CustomerID, &order.CustomerName, &order.OrderDate, &order.ShipmentDue, &order.ShipmentAddress, &order.OrderStatus, &order.TotalPrice, &order.NoOfItems)
 		if err != nil {
 			return nil, err
 		}
 
 		// Fetch items for this order
-		itemsQuery := `
-			SELECT id, name, size, color, price, quantity, shipped
-			FROM items
+		itemQuery := `
+			SELECT id, name, size, color, price, quantity
+			FROM order_items
 			WHERE order_id = $1
 		`
-		itemRows, err := s.DB.Query(itemsQuery, order.ID)
+		itemRows, err := s.DB.Query(itemQuery, order.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -63,79 +65,63 @@ func (s *PostgresStorage) GetOrderHistoryByCustomerName(customerName string) ([]
 		var items []models.Item
 		for itemRows.Next() {
 			var item models.Item
-			err := itemRows.Scan(&item.ID, &item.Name, &item.Size, &item.Color, &item.Price, &item.Quantity, &item.Shipped)
+			err = itemRows.Scan(&item.ID, &item.Name, &item.Size, &item.Color, &item.Price, &item.Quantity)
 			if err != nil {
 				return nil, err
 			}
 			items = append(items, item)
 		}
 		order.Items = items
-
 		orders = append(orders, order)
 	}
 
 	return orders, nil
 }
 
-func (s *PostgresStorage) GetOrderByID(orderID int) (*models.Order, error) {
-	query := `
-		SELECT o.id, o.customer_id, o.customer_name, o.order_date, o.shipment_due, o.shipment_address, o.order_status,
-		       COALESCE(SUM(i.price * i.quantity), 0) AS total_price, COUNT(i.id) AS no_of_items
-		FROM orders o
-		LEFT JOIN items i ON o.id = i.order_id
-		WHERE o.id = $1
-		GROUP BY o.id
-	`
+func (s *PostgresStorage) GetOrderByID(orderID int) (models.Order, error) {
 	var order models.Order
+	query := `
+		SELECT id, customer_id, customer_name, order_date, shipment_due, shipment_address, order_status, total_price, no_of_items
+		FROM orders
+		WHERE id = $1
+	`
 	err := s.DB.QueryRow(query, orderID).Scan(
-		&order.ID,
-		&order.CustomerID,
-		&order.CustomerName,
-		&order.OrderDate,
-		&order.ShipmentDue,
-		&order.ShipmentAddress,
-		&order.OrderStatus,
-		&order.TotalPrice,
-		&order.NoOfItems,
+		&order.ID, &order.CustomerID, &order.CustomerName, &order.OrderDate, &order.ShipmentDue, &order.ShipmentAddress,
+		&order.OrderStatus, &order.TotalPrice, &order.NoOfItems,
 	)
 	if err != nil {
-		return nil, err
+		return models.Order{}, err
 	}
 
-	// Fetch items
-	itemsQuery := `
-		SELECT id, name, size, color, price, quantity, shipped
-		FROM items
+	itemQuery := `
+		SELECT id, name, size, color, price, quantity
+		FROM order_items
 		WHERE order_id = $1
 	`
-	rows, err := s.DB.Query(itemsQuery, orderID)
+	itemRows, err := s.DB.Query(itemQuery, order.ID)
 	if err != nil {
-		return nil, err
+		return models.Order{}, err
 	}
-	defer rows.Close()
+	defer itemRows.Close()
 
 	var items []models.Item
-	for rows.Next() {
+	for itemRows.Next() {
 		var item models.Item
-		err := rows.Scan(&item.ID, &item.Name, &item.Size, &item.Color, &item.Price, &item.Quantity, &item.Shipped)
+		err = itemRows.Scan(&item.ID, &item.Name, &item.Size, &item.Color, &item.Price, &item.Quantity)
 		if err != nil {
-			return nil, err
+			return models.Order{}, err
 		}
 		items = append(items, item)
 	}
 	order.Items = items
 
-	return &order, nil
+	return order, nil
 }
 
 func (s *PostgresStorage) GetAllOrders() ([]models.Order, error) {
 	query := `
-		SELECT o.id, o.customer_id, o.customer_name, o.order_date, o.shipment_due, o.shipment_address, o.order_status,
-		       COALESCE(SUM(i.price * i.quantity), 0) AS total_price, COUNT(i.id) AS no_of_items
-		FROM orders o
-		LEFT JOIN items i ON o.id = i.order_id
-		GROUP BY o.id
-		ORDER BY o.order_date DESC
+		SELECT id, customer_id, customer_name, order_date, shipment_due, shipment_address, order_status, total_price, no_of_items
+		FROM orders
 	`
 	rows, err := s.DB.Query(query)
 	if err != nil {
@@ -146,28 +132,21 @@ func (s *PostgresStorage) GetAllOrders() ([]models.Order, error) {
 	var orders []models.Order
 	for rows.Next() {
 		var order models.Order
-		err := rows.Scan(
-			&order.ID,
-			&order.CustomerID,
-			&order.CustomerName,
-			&order.OrderDate,
-			&order.ShipmentDue,
-			&order.ShipmentAddress,
-			&order.OrderStatus,
-			&order.TotalPrice,
-			&order.NoOfItems,
+		err = rows.Scan(
+			&order.ID, &order.CustomerID, &order.CustomerName, &order.OrderDate, &order.ShipmentDue, &order.ShipmentAddress,
+			&order.OrderStatus, &order.TotalPrice, &order.NoOfItems,
 		)
 		if err != nil {
 			return nil, err
 		}
 
-		// Fetch items
-		itemsQuery := `
-			SELECT id, name, size, color, price, quantity, shipped
-			FROM items
+		// Fetch items for each order
+		itemQuery := `
+			SELECT id, name, size, color, price, quantity
+			FROM order_items
 			WHERE order_id = $1
 		`
-		itemRows, err := s.DB.Query(itemsQuery, order.ID)
+		itemRows, err := s.DB.Query(itemQuery, order.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -176,7 +155,7 @@ func (s *PostgresStorage) GetAllOrders() ([]models.Order, error) {
 		var items []models.Item
 		for itemRows.Next() {
 			var item models.Item
-			err := itemRows.Scan(&item.ID, &item.Name, &item.Size, &item.Color, &item.Price, &item.Quantity, &item.Shipped)
+			err = itemRows.Scan(&item.ID, &item.Name, &item.Size, &item.Color, &item.Price, &item.Quantity)
 			if err != nil {
 				return nil, err
 			}
@@ -189,6 +168,21 @@ func (s *PostgresStorage) GetAllOrders() ([]models.Order, error) {
 
 	return orders, nil
 }
+
+func (s *PostgresStorage) DeleteOrder(orderID int) error {
+
+	itemQuery := `DELETE FROM order_items WHERE order_id = $1`
+	_, err := s.DB.Exec(itemQuery, orderID)
+	if err != nil {
+		return err
+	}
+
+	orderQuery := `DELETE FROM orders WHERE id = $1`
+	_, err = s.DB.Exec(orderQuery, orderID)
+	return err
+}
+
+// // *****************************************************************************///
 func (s *PostgresStorage) UpdateOrderStatus(orderID int, status string) error {
 	query := `
 		UPDATE orders
@@ -196,12 +190,6 @@ func (s *PostgresStorage) UpdateOrderStatus(orderID int, status string) error {
 		WHERE id = $2
 	`
 	_, err := s.DB.Exec(query, status, orderID)
-	return err
-}
-
-func (s *PostgresStorage) DeleteOrder(order int) error {
-	query := `DELETE FROM order WHERE id = $1`
-	_, err := s.DB.Exec(query, order)
 	return err
 }
 

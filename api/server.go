@@ -26,23 +26,23 @@ func (s *ApiServer) Start() {
 	router.HandleFunc("/customers", s.handleCustomers).Methods("POST")
 	router.HandleFunc("/customers", s.getAllCustomers).Methods("GET")
 	router.HandleFunc("/customers/{id:[0-9]+}", s.getCustomerByID).Methods("GET")
+	router.HandleFunc("/customer/totalCount", s.getCustumerCount).Methods("GET")
+	router.HandleFunc("/customers/{id}", s.handleEditCustomers).Methods("PUT")
 
 	//MARK:Order
 
-	router.HandleFunc("/orders", s.handleOrders).Methods("POST")
-	router.HandleFunc("/orders/{id}", s.handleGetOrderByID).Methods("GET")
-
+	router.HandleFunc("/orders", s.handleCreateOrder).Methods("POST")
+	router.HandleFunc("/orders/{id:[0-9]+}", s.handleGetOrderByID).Methods("GET")
 	router.HandleFunc("/orders", s.handleGetAllOrders).Methods("GET")
 
-	router.HandleFunc("update_order_status", s.UpdateOrderStatusHandler).Methods("POST")
-	router.HandleFunc("/orders", s.handleDeleteOrders).Methods("DELETE")
+	router.HandleFunc("/orders/{id:[0-9]+}/status", s.UpdateOrderStatusHandler).Methods("POST")
 
-	router.HandleFunc("/orders/total-value/{customer_name}", s.handleOrderCountByCustomerName).Methods("GET")
+	router.HandleFunc("/orders/{id:[0-9]+}", s.handleDeleteOrder).Methods("DELETE")
 
-	router.HandleFunc("/orders/history/{customer_name}", s.handleGetAllOrdersByCustumerName).Methods("GET")
-	router.HandleFunc("/orders/{customer_name}", s.handleTotalOrderValueByCustomerName).Methods("GET")
-
-	router.HandleFunc("/orders/{pending-count}", s.handlePendingOrderCount).Methods("GET")
+	router.HandleFunc("/orders/total-value/{customer_name}", s.handleTotalOrderValueByCustomerName).Methods("GET")
+	router.HandleFunc("/orders/history/{customer_name}", s.handleGetOrderHistoryByCustomerName).Methods("GET")
+	router.HandleFunc("/orders/pending-count", s.handlePendingOrderCount).Methods("GET")
+	router.HandleFunc("/orders/count/{customer_name}", s.handleOrderCountByCustomerName).Methods("GET")
 
 	//MARK:Shipmemnt
 

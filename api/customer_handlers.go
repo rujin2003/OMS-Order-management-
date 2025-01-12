@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 )
@@ -24,6 +25,30 @@ func (s *ApiServer) handleCustomers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(map[string]int{"customer_id": id})
+}
+func (s *ApiServer) handleEditCustomers(w http.ResponseWriter, r *http.Request) {
+	var customer models.Customer
+	if err := json.NewDecoder(r.Body).Decode(&customer); err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid customer ID", http.StatusBadRequest)
+		return
+	}
+	customer.ID = id
+	err = s.Store.EditCustumerDetails(customer)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error updating customer: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Customer updated successfully"})
 }
 
 func (s *ApiServer) getCustomerByID(w http.ResponseWriter, r *http.Request) {
@@ -49,4 +74,12 @@ func (s *ApiServer) getAllCustomers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	json.NewEncoder(w).Encode(customers)
+}
+func (s *ApiServer) getCustumerCount(w http.ResponseWriter, r *http.Request) {
+	count, err := s.Store.CountCustumer()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error fetching customer: %v", err), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(count)
 }

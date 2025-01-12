@@ -16,6 +16,14 @@ func NewPostgresStorage() (*PostgresStorage, error) {
 	return &PostgresStorage{DB: db}, nil
 }
 
+func (s *PostgresStorage) EditCustumerDetails(customer models.Customer) error {
+	query := `UPDATE customers
+			  SET name = $1, number = $2, email = $3, country = $4, address = $5
+			  WHERE id = $6`
+	_, err := s.DB.Exec(query, customer.Name, customer.Number, customer.Email, customer.Country, customer.Address, customer.ID)
+	return err
+}
+
 func (s *PostgresStorage) GetAllCustomers() ([]models.Customer, error) {
 	rows, err := s.DB.Query("SELECT id, name, number, email, country, address FROM customers")
 	if err != nil {
@@ -59,4 +67,10 @@ func (s *PostgresStorage) CreateCustomer(name string, number int, email string, 
 	`
 	err := s.DB.QueryRow(query, name, number, email, country, address).Scan(&id)
 	return id, err
+}
+func (s *PostgresStorage) CountCustumer() (int, error) {
+	var count int
+	err := s.DB.QueryRow("SELECT COUNT(*) FROM customers").Scan(&count)
+	return count, err
+
 }

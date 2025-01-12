@@ -13,8 +13,6 @@ type Order struct {
 	NoOfItems       int     `json:"no_of_items"`
 }
 
-
-
 type Item struct {
 	ID       int     `json:"id"`
 	Name     string  `json:"name"`
@@ -22,6 +20,4 @@ type Item struct {
 	Color    *string `json:"color,omitempty"`
 	Price    float64 `json:"price"`
 	Quantity int     `json:"quantity"`
-	Shipped  bool    `json:"shipped"`
-	Ola 	string  `json:"ola"`	
 }

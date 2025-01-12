@@ -11,11 +11,6 @@ type PostgresStorage struct {
 	DB *sql.DB
 }
 
-// AddItemToOrder implements Storage.
-func (s *PostgresStorage) AddItemToOrder(orderID int, name string, size *string, color *string, price float64, quantity int) error {
-	panic("unimplemented")
-}
-
 func (s *PostgresStorage) CreateShipment(orderID int, itemIDs []int) error {
 	_, err := s.DB.Exec("INSERT INTO shipments (order_id, shipped_date, item_ids) VALUES ($1, CURRENT_DATE, $2)", orderID, itemIDs)
 	if err != nil {
@@ -55,7 +50,7 @@ func (s *PostgresStorage) GetOrderHistoryByName(customerName string) ([]models.O
 
 		// Fetch items associated with the current order
 		queryItems := `
-			SELECT id, name, size, color, price, shipped
+			SELECT id, name, size, color, price
 			FROM items
 			WHERE order_id = $1
 		`
@@ -68,7 +63,7 @@ func (s *PostgresStorage) GetOrderHistoryByName(customerName string) ([]models.O
 		var items []models.Item
 		for itemRows.Next() {
 			var item models.Item
-			if err := itemRows.Scan(&item.ID, &item.Name, &item.Size, &item.Color, &item.Price, &item.Shipped); err != nil {
+			if err := itemRows.Scan(&item.ID, &item.Name, &item.Size, &item.Color, &item.Price); err != nil {
 				itemRows.Close()
 				return nil, err
 			}
@@ -128,4 +123,3 @@ func (s *PostgresStorage) GetShipmentHistoryByName(name string) ([]models.Shipme
 func (s *PostgresStorage) Close() {
 	s.DB.Close()
 }
-
