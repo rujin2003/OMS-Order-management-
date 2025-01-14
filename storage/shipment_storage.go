@@ -6,120 +6,161 @@ import (
 	"encoding/json"
 
 	"fmt"
+	"log"
 )
 
 func (s *PostgresStorage) HandleShipment(shipment models.Shipment) error {
 	// Start a database transaction
 	tx, err := s.DB.Begin()
 	if err != nil {
+		log.Printf("Error starting transaction: %v", err)
 		return fmt.Errorf("failed to start transaction: %v", err)
 	}
 	defer tx.Rollback()
 
-	// Step 1: Validate Order ID and Fetch Order Status
+	// Step 1: Validate Order ID
 	var orderStatus string
 	err = tx.QueryRow(`SELECT order_status FROM orders WHERE id = $1`, shipment.OrderID).Scan(&orderStatus)
 	if err != nil {
+		log.Printf("Invalid order ID: %v", err)
 		return fmt.Errorf("invalid order ID: %v", err)
 	}
+	log.Printf("Initial order status: %s", orderStatus)
 
-	// Step 2: Fetch Original Order Items
+	// Step 2: Fetch Order Items
 	orderItemsQuery := `
-		SELECT id, name, size, color, price, quantity
+		SELECT id, name, quantity
 		FROM order_items
 		WHERE order_id = $1
 	`
 	rows, err := tx.Query(orderItemsQuery, shipment.OrderID)
 	if err != nil {
+		log.Printf("Error fetching order items: %v", err)
 		return fmt.Errorf("failed to fetch order items: %v", err)
 	}
 	defer rows.Close()
 
-	originalItems := map[int]models.Item{}
+	orderItems := map[int]models.Item{}
 	for rows.Next() {
 		var item models.Item
-		if err := rows.Scan(&item.ID, &item.Name, &item.Size, &item.Color, &item.Price, &item.Quantity); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.Quantity); err != nil {
+			log.Printf("Error scanning order item: %v", err)
 			return fmt.Errorf("failed to scan order item: %v", err)
 		}
-		originalItems[item.ID] = item
+		orderItems[item.ID] = item
 	}
 
-	// Step 3: Handle Shipment Based on `dueOrderType`
+	// Step 3: Handle Shipment Logic
 	if shipment.DueOrderType {
+		// Ensure the order is already "shipped and due"
+		if orderStatus != "shipped and due" {
+			log.Printf("Order status mismatch: expected 'shipped and due', got '%s'", orderStatus)
+			return fmt.Errorf("order is not in 'shipped and due' status")
+		}
+
 		// Fetch due items
-		dueItems := map[int]int{}
-		dueRows, err := tx.Query(`
+		dueItemsQuery := `
 			SELECT item_id, quantity
 			FROM due_orders
 			WHERE order_id = $1
-		`, shipment.OrderID)
+		`
+		dueRows, err := tx.Query(dueItemsQuery, shipment.OrderID)
 		if err != nil {
+			log.Printf("Error fetching due items: %v", err)
 			return fmt.Errorf("failed to fetch due items: %v", err)
 		}
 		defer dueRows.Close()
 
+		dueItems := map[int]int{}
 		for dueRows.Next() {
 			var itemID, quantity int
 			if err := dueRows.Scan(&itemID, &quantity); err != nil {
+				log.Printf("Error scanning due item: %v", err)
 				return fmt.Errorf("failed to scan due item: %v", err)
 			}
 			dueItems[itemID] = quantity
 		}
 
-		// Validate shipment items
-		for _, shippedItemID := range shipment.Items {
-			if dueItems[shippedItemID] == 0 {
-				return fmt.Errorf("item ID %d is not due for shipment", shippedItemID)
+		// Validate shipment items match due items exactly
+		for _, shippedItem := range shipment.Items {
+			dueQuantity, exists := dueItems[shippedItem.ID]
+			if !exists || shippedItem.Quantity != dueQuantity {
+				log.Printf("Shipment item %d does not match due quantity", shippedItem.ID)
+				return fmt.Errorf("shipment item %d does not match due quantity", shippedItem.ID)
 			}
 		}
+
+		// Remove due items after successful shipment
+		_, err = tx.Exec(`
+			DELETE FROM due_orders
+			WHERE order_id = $1
+		`, shipment.OrderID)
+		if err != nil {
+			log.Printf("Error clearing due orders: %v", err)
+			return fmt.Errorf("failed to clear due orders: %v", err)
+		}
+
+		// Update order status to "shipped"
+		orderStatus = "shipped"
 	} else {
-		// Validate partial shipment
-		for _, shippedItemID := range shipment.Items {
-			originalItem, exists := originalItems[shippedItemID]
+		// Validate partial shipment and update due items
+		hasDueItems := false
+		for _, shippedItem := range shipment.Items {
+			orderItem, exists := orderItems[shippedItem.ID]
 			if !exists {
-				return fmt.Errorf("item ID %d does not exist in the order", shippedItemID)
+				log.Printf("Item ID %d does not exist in the order", shippedItem.ID)
+				return fmt.Errorf("item ID %d does not exist in the order", shippedItem.ID)
+			}
+			if shippedItem.Quantity > orderItem.Quantity {
+				log.Printf("Shipped quantity for item %d exceeds order quantity", shippedItem.ID)
+				return fmt.Errorf("shipped quantity for item %d exceeds order quantity", shippedItem.ID)
 			}
 
-			// Update due items
-			if originalItem.Quantity > 1 {
+			// Calculate due quantity
+			dueQuantity := orderItem.Quantity - shippedItem.Quantity
+			if dueQuantity > 0 {
+				hasDueItems = true // Mark that there are due items
 				_, err = tx.Exec(`
 					INSERT INTO due_orders (order_id, item_id, quantity)
 					VALUES ($1, $2, $3)
 					ON CONFLICT (order_id, item_id)
-					DO UPDATE SET quantity = due_orders.quantity + EXCLUDED.quantity
-				`, shipment.OrderID, originalItem.ID, originalItem.Quantity-1)
+					DO UPDATE SET quantity = EXCLUDED.quantity
+				`, shipment.OrderID, orderItem.ID, dueQuantity)
 				if err != nil {
+					log.Printf("Error updating due orders: %v", err)
 					return fmt.Errorf("failed to update due orders: %v", err)
 				}
 			}
 		}
-	}
 
-	// Step 4: Insert Shipment Record
-	_, err = tx.Exec(`
-		INSERT INTO shipments (order_id, shipped_date, items)
-		VALUES ($1, $2, $3)
-	`, shipment.OrderID, shipment.ShippedDate, shipment.Items)
-	if err != nil {
-		return fmt.Errorf("failed to insert shipment: %v", err)
+		// Determine order status based on whether there are due items
+		if hasDueItems {
+			orderStatus = "shipped and due"
+		} else {
+			orderStatus = "shipped"
+		}
 	}
+	log.Printf("Final order status: %s", orderStatus)
 
-	// Step 5: Update Order Status
-	newStatus := "shipped"
-	if len(shipment.Items) < len(originalItems) {
-		newStatus = "shipped and due"
-	}
+	// Step 4: Update Order Status
 	_, err = tx.Exec(`
 		UPDATE orders
 		SET order_status = $1
 		WHERE id = $2
-	`, newStatus, shipment.OrderID)
+	`, orderStatus, shipment.OrderID)
 	if err != nil {
+		log.Printf("Error updating order status: %v", err)
 		return fmt.Errorf("failed to update order status: %v", err)
 	}
 
 	// Commit transaction
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		log.Printf("Error committing transaction: %v", err)
+		return fmt.Errorf("failed to commit transaction: %v", err)
+	}
+
+	log.Printf("Shipment processed successfully for order ID %d", shipment.OrderID)
+	return nil
 }
 
 func (s *PostgresStorage) GetAllShipments() ([]models.Shipment, error) {
@@ -197,27 +238,96 @@ func (s *PostgresStorage) DeleteShipment(shipmentID int) error {
 	return nil
 }
 
+func (s *PostgresStorage) GetShipmentByName(customerName string) ([]models.Shipment, error) {
+
+	var orderID int
+	err := s.DB.QueryRow(`
+		SELECT o.id
+		FROM orders o
+		INNER JOIN customers c ON o.customer_id = c.id
+		WHERE c.name = $1
+	`, customerName).Scan(&orderID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("no orders found for customer: %s", customerName)
+		}
+		return nil, fmt.Errorf("failed to fetch order ID for customer %s: %v", customerName, err)
+	}
+
+	// Fetch Shipments for the Order ID
+	rows, err := s.DB.Query(`
+		SELECT id, shipped_date, order_id, items, due_order_type
+		FROM shipments
+		WHERE order_id = $1
+	`, orderID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch shipments for order ID %d: %v", orderID, err)
+	}
+	defer rows.Close()
+
+	return s.parseShipments(rows)
+}
+
 //HELPER FUNCTION
 
 func (s *PostgresStorage) parseShipments(rows *sql.Rows) ([]models.Shipment, error) {
-	shipments := []models.Shipment{}
+	var shipments []models.Shipment
 
 	for rows.Next() {
 		var shipment models.Shipment
-		var itemsJSON []byte
+		var itemsSQL sql.NullString
 
-		err := rows.Scan(&shipment.ID, &shipment.ShippedDate, &shipment.OrderID, &itemsJSON, &shipment.DueOrderType)
+		err := rows.Scan(&shipment.ID, &shipment.ShippedDate, &shipment.OrderID, &itemsSQL, &shipment.DueOrderType)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse shipment row: %v", err)
+			return nil, fmt.Errorf("failed to scan shipment row: %v", err)
 		}
 
-		// Decode JSON-encoded items
-		if err := json.Unmarshal(itemsJSON, &shipment.Items); err != nil {
-			return nil, fmt.Errorf("failed to decode shipment items: %v", err)
+		// Handle NULL items
+		if itemsSQL.Valid {
+			err = json.Unmarshal([]byte(itemsSQL.String), &shipment.Items)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode shipment items: %v", err)
+			}
+		} else {
+			shipment.Items = []models.Item{} // Default to an empty slice
 		}
 
 		shipments = append(shipments, shipment)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %v", err)
+	}
+
 	return shipments, nil
+}
+
+func (s *PostgresStorage) GetDueItems(orderID int) ([]DueItem, error) {
+	var dueItems []DueItem
+	query := `
+        SELECT item_id, quantity
+        FROM due_orders
+        WHERE order_id = $1;
+    `
+	rows, err := s.DB.Query(query, orderID)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving due items: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var dueItem DueItem
+		if err := rows.Scan(&dueItem.ItemID, &dueItem.Quantity); err != nil {
+			return nil, fmt.Errorf("error scanning due item: %w", err)
+		}
+		dueItems = append(dueItems, dueItem)
+	}
+
+	return dueItems, nil
+}
+
+// DueItem struct
+type DueItem struct {
+	ItemID   int `json:"item_id"`
+	Quantity int `json:"quantity"`
 }

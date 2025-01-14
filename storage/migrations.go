@@ -50,6 +50,7 @@ func (s *PostgresStorage) Init() error {
 		items INT[] -- Array of item IDs for shipped items
 	);
 	`)
+
 	return err
 }
 func NewPostgresStorage() (*PostgresStorage, error) {

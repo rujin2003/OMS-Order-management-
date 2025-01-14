@@ -46,6 +46,7 @@ func (s *ApiServer) handleGetCompletedShipments(w http.ResponseWriter, r *http.R
 	}
 	json.NewEncoder(w).Encode(shipments)
 }
+
 func (s *ApiServer) handleGetShippedButPendingShipments(w http.ResponseWriter, r *http.Request) {
 	shipments, err := s.Store.GetShippedButPendingShipments()
 	if err != nil {
@@ -73,4 +74,31 @@ func (s *ApiServer) handleDeleteShipment(w http.ResponseWriter, r *http.Request)
 	// Respond with success
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Shipment deleted successfully"})
+}
+func (s *ApiServer) handleGetDueItems(w http.ResponseWriter, r *http.Request) {
+	// Extracting the order_id from the URL path
+	vars := mux.Vars(r)
+	orderIDStr, ok := vars["order_id"]
+	if !ok {
+		http.Error(w, "Missing order_id path parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Converting order_id to an integer
+	orderID, err := strconv.Atoi(orderIDStr)
+	if err != nil {
+		http.Error(w, "Invalid order_id, must be an integer", http.StatusBadRequest)
+		return
+	}
+
+	// Fetching due items from the database
+	dueItems, err := s.Store.GetDueItems(orderID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error retrieving due items: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Sending response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(dueItems)
 }

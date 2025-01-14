@@ -2,20 +2,53 @@ package storage
 
 import (
 	"AAHAOMS/OMS/models"
+	"log"
 )
 
-func (s *PostgresStorage) CreateOrder(order models.Order) (int, error) {
-	var orderID int
+func (s *PostgresStorage) GetTotalSalesForShippedOrders() (float64, error) {
 	query := `
-		INSERT INTO orders (customer_id, customer_name, order_date, shipment_due, shipment_address, order_status, total_price, no_of_items)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		SELECT COALESCE(SUM(o.total_price), 0) AS total_sales
+		FROM orders o
+		WHERE TRIM(o.order_status) = 'shipped'
+	`
+	var totalSales float64
+	err := s.DB.QueryRow(query).Scan(&totalSales)
+	if err != nil {
+		log.Printf("Error calculating total sales for shipped orders: %v", err)
+		return 0, err
+	}
+	log.Printf("Total sales for shipped orders: %f", totalSales)
+	return totalSales, nil
+}
+
+func (s *PostgresStorage) CreateOrder(order models.Order) (int, error) {
+	if order.OrderStatus == "" {
+		order.OrderStatus = "pending"
+	}
+
+	query := `
+		INSERT INTO orders (id, customer_id, customer_name, order_date, shipment_due, shipment_address, order_status, total_price, no_of_items)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id
 	`
-	err := s.DB.QueryRow(query, order.CustomerID, order.CustomerName, order.OrderDate, order.ShipmentDue, order.ShipmentAddress, order.OrderStatus, order.TotalPrice, order.NoOfItems).Scan(&orderID)
+	var orderID int
+	err := s.DB.QueryRow(
+		query,
+		order.ID, // Pass the provided ID
+		order.CustomerID,
+		order.CustomerName,
+		order.OrderDate,
+		order.ShipmentDue,
+		order.ShipmentAddress,
+		order.OrderStatus,
+		order.TotalPrice,
+		order.NoOfItems,
+	).Scan(&orderID)
 	if err != nil {
 		return 0, err
 	}
 
+	// Insert items for this order
 	for _, item := range order.Items {
 		query = `
 			INSERT INTO order_items (order_id, name, size, color, price, quantity)
@@ -218,11 +251,18 @@ func (s *PostgresStorage) GetOrderCountByCustomerName(customerName string) (int,
 
 func (s *PostgresStorage) GetPendingOrderCount() (int, error) {
 	query := `
-		SELECT COUNT(*)
-		FROM orders
-		WHERE order_status = 'pending'
-	`
+	SELECT COUNT(*)
+	FROM orders
+	WHERE TRIM(order_status) = 'pending'
+`
 	var pendingCount int
 	err := s.DB.QueryRow(query).Scan(&pendingCount)
-	return pendingCount, err
+
+	if err != nil {
+
+		log.Printf("Error executing query: %v", err)
+		return 0, err
+	}
+	log.Printf("Query executed successfully. Pending order count: %d", pendingCount)
+	return pendingCount, nil
 }

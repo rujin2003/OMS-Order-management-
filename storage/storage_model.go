@@ -30,4 +30,7 @@ type Storage interface {
 	GetAllShipments() ([]models.Shipment, error)
 	GetCompletedShipments() ([]models.Shipment, error)
 	GetShippedButPendingShipments() ([]models.Shipment, error)
+	GetDueItems(orderID int) ([]DueItem, error)
+	GetItemByID(itemID int) (models.Item, error)
+	GetTotalSalesForShippedOrders() (float64, error)
 }

@@ -4,6 +4,7 @@ import (
 	"AAHAOMS/OMS/models"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -28,6 +29,20 @@ func (s *ApiServer) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]int{"order_id": orderID})
 }
 
+func (s *ApiServer) handleGetTotalSales(w http.ResponseWriter, r *http.Request) {
+	totalSales, err := s.Store.GetTotalSalesForShippedOrders()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error fetching total sales: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(map[string]float64{"total_sales": totalSales})
+	if err != nil {
+		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+	}
+}
+
 func (s *ApiServer) handleGetOrderByID(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	orderID, err := strconv.Atoi(vars["id"])
@@ -46,18 +61,23 @@ func (s *ApiServer) handleGetOrderByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *ApiServer) handleGetOrderHistoryByCustomerName(w http.ResponseWriter, r *http.Request) {
-	customerName := r.URL.Query().Get("customer_name")
-	if customerName == "" {
+
+	vars := mux.Vars(r)
+	customerName, ok := vars["customer_name"]
+	if !ok || customerName == "" {
 		http.Error(w, "Customer name is required", http.StatusBadRequest)
 		return
 	}
 
+	// Fetch the order history from the store
 	orders, err := s.Store.GetOrderHistoryByCustomerName(customerName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error fetching order history: %v", err), http.StatusInternalServerError)
 		return
 	}
 
+	// Encode the orders as JSON and send as response
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(orders)
 }
 func (s *ApiServer) handleGetAllOrders(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +178,7 @@ func (s *ApiServer) handleOrderCountByCustomerName(w http.ResponseWriter, r *htt
 
 func (s *ApiServer) handlePendingOrderCount(w http.ResponseWriter, r *http.Request) {
 	pendingCount, err := s.Store.GetPendingOrderCount()
+	log.Println(pendingCount)
 	if err != nil {
 		http.Error(w, "Failed to fetch pending order count", http.StatusInternalServerError)
 		return
