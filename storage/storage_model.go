@@ -33,4 +33,5 @@ type Storage interface {
 	GetDueItems(orderID int) ([]DueItem, error)
 	GetItemByID(itemID int) (models.Item, error)
 	GetTotalSalesForShippedOrders() (float64, error)
+	GetTotalSalesForShippedOrdersByCustomer(customerName string) (float64, error)
 }

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"AAHAOMS/OMS/models"
+	"fmt"
 	"log"
 )
 
@@ -18,6 +19,22 @@ func (s *PostgresStorage) GetTotalSalesForShippedOrders() (float64, error) {
 		return 0, err
 	}
 	log.Printf("Total sales for shipped orders: %f", totalSales)
+	return totalSales, nil
+}
+
+func (s *PostgresStorage) GetTotalSalesForShippedOrdersByCustomer(customerName string) (float64, error) {
+	query := `
+		SELECT COALESCE(SUM(o.total_price), 0) AS total_sales
+		FROM orders o
+		WHERE TRIM(o.order_status) = 'shipped' AND TRIM(o.customer_name) ILIKE $1
+	`
+	var totalSales float64
+	err := s.DB.QueryRow(query, "%"+customerName+"%").Scan(&totalSales)
+	if err != nil {
+		log.Printf("Error calculating total sales for shipped orders by customer %s: %v", customerName, err)
+		return 0, err
+	}
+	log.Printf("Total sales for shipped orders by customer %s: %f", customerName, totalSales)
 	return totalSales, nil
 }
 
@@ -204,15 +221,36 @@ func (s *PostgresStorage) GetAllOrders() ([]models.Order, error) {
 
 func (s *PostgresStorage) DeleteOrder(orderID int) error {
 
-	itemQuery := `DELETE FROM order_items WHERE order_id = $1`
-	_, err := s.DB.Exec(itemQuery, orderID)
+	tx, err := s.DB.Begin()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to start transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	shipmentQuery := `DELETE FROM shipments WHERE order_id = $1`
+	_, err = tx.Exec(shipmentQuery, orderID)
+	if err != nil {
+		return fmt.Errorf("failed to delete related shipments: %v", err)
+	}
+
+	itemQuery := `DELETE FROM order_items WHERE order_id = $1`
+	_, err = tx.Exec(itemQuery, orderID)
+	if err != nil {
+		return fmt.Errorf("failed to delete related order items: %v", err)
 	}
 
 	orderQuery := `DELETE FROM orders WHERE id = $1`
-	_, err = s.DB.Exec(orderQuery, orderID)
-	return err
+	_, err = tx.Exec(orderQuery, orderID)
+	if err != nil {
+		return fmt.Errorf("failed to delete order: %v", err)
+	}
+
+	// Commit the transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %v", err)
+	}
+
+	return nil
 }
 
 // // *****************************************************************************///

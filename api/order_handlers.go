@@ -28,6 +28,23 @@ func (s *ApiServer) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	json.NewEncoder(w).Encode(map[string]int{"order_id": orderID})
 }
+func (s *ApiServer) handlerDeleteOrder(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	orderID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid order ID", http.StatusBadRequest)
+		return
+	}
+
+	err = s.Store.DeleteOrder(orderID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error deleting order: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Order deleted successfully"})
+}
 
 func (s *ApiServer) handleGetTotalSales(w http.ResponseWriter, r *http.Request) {
 	totalSales, err := s.Store.GetTotalSalesForShippedOrders()
@@ -36,6 +53,29 @@ func (s *ApiServer) handleGetTotalSales(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(map[string]float64{"total_sales": totalSales})
+	if err != nil {
+		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+	}
+}
+func (s *ApiServer) handleGetTotalSalesByCustomer(w http.ResponseWriter, r *http.Request) {
+	// Extract the customer name from the route parameters
+	vars := mux.Vars(r)
+	customerName, ok := vars["customerName"]
+	if !ok || customerName == "" {
+		http.Error(w, "Customer name is required", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch total sales for the customer
+	totalSales, err := s.Store.GetTotalSalesForShippedOrdersByCustomer(customerName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error fetching total sales for customer %s: %v", customerName, err), http.StatusInternalServerError)
+		return
+	}
+
+	// Return the result as JSON
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(map[string]float64{"total_sales": totalSales})
 	if err != nil {
@@ -117,24 +157,6 @@ func (s *ApiServer) UpdateOrderStatusHandler(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "Order status updated successfully",
 	})
-}
-
-func (s *ApiServer) handleDeleteOrder(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	orderID, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		http.Error(w, "Invalid order ID", http.StatusBadRequest)
-		return
-	}
-
-	err = s.Store.DeleteOrder(orderID)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error deleting order: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Order deleted successfully"})
 }
 
 func (s *ApiServer) handleTotalOrderValueByCustomerName(w http.ResponseWriter, r *http.Request) {
