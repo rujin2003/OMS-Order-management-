@@ -57,6 +57,8 @@
 //	}
 package api
 
+//MARK: TODO: Delete Customer function
+
 import (
 	"fmt"
 	"net/http"
@@ -121,7 +123,10 @@ func (s *ApiServer) Start() {
 	router.HandleFunc("/shipments", makeHandler(wrapHandler(s.handlePostShipment))).Methods("POST")
 	router.HandleFunc("/shipments", makeHandler(wrapHandler(s.handleGetAllShipments))).Methods("GET")
 	router.HandleFunc("/shipments/completed", makeHandler(wrapHandler(s.handleGetCompletedShipments))).Methods("GET")
+
 	router.HandleFunc("/shipments/shipped-pending", makeHandler(wrapHandler(s.handleGetShippedButPendingShipments))).Methods("GET")
+	router.Handle("/shipments/{customer_name}", makeHandler(wrapHandler(s.handleGetShipmentHistoryByCustomerName))).Methods("GET")
+
 	router.HandleFunc("/shipments/{id}", makeHandler(wrapHandler(s.handleDeleteShipment))).Methods("DELETE")
 	router.HandleFunc("/due_items/{order_id}", makeHandler(wrapHandler(s.handleGetDueItems))).Methods("GET")
 	router.HandleFunc("/items/{id}", makeHandler(wrapHandler(s.handleGetItemByID))).Methods("GET")

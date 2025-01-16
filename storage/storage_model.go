@@ -12,6 +12,7 @@ type Storage interface {
 	GetCustomerByID(id string) (*models.Customer, error)
 	GetAllCustomers() ([]models.Customer, error)
 	CountCustumer() (int, error)
+	DeleteCustomer(id int) error
 
 	///Order
 	CreateOrder(order models.Order) (int, error)
@@ -34,4 +35,5 @@ type Storage interface {
 	GetItemByID(itemID int) (models.Item, error)
 	GetTotalSalesForShippedOrders() (float64, error)
 	GetTotalSalesForShippedOrdersByCustomer(customerName string) (float64, error)
+	GetShipmentByName(customerName string) ([]models.Shipment, error)
 }

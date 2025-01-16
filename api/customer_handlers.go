@@ -26,6 +26,7 @@ func (s *ApiServer) handleCustomers(w http.ResponseWriter, r *http.Request) {
 
 	json.NewEncoder(w).Encode(map[string]int{"customer_id": id})
 }
+
 func (s *ApiServer) handleEditCustomers(w http.ResponseWriter, r *http.Request) {
 	var customer models.Customer
 	if err := json.NewDecoder(r.Body).Decode(&customer); err != nil {
@@ -82,4 +83,21 @@ func (s *ApiServer) getCustumerCount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	json.NewEncoder(w).Encode(count)
+}
+func (s *ApiServer) handleDeleteCustomer(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid customer ID", http.StatusBadRequest)
+		return
+	}
+
+	err = s.Store.DeleteCustomer(id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error deleting customer: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Customer deleted successfully"})
 }

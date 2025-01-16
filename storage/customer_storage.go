@@ -65,3 +65,8 @@ func (s *PostgresStorage) CountCustumer() (int, error) {
 	return count, err
 
 }
+func (s *PostgresStorage) DeleteCustomer(id int) error {
+	query := `DELETE FROM customers WHERE id = $1`
+	_, err := s.DB.Exec(query, id)
+	return err
+}

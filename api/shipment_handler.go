@@ -102,3 +102,24 @@ func (s *ApiServer) handleGetDueItems(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(dueItems)
 }
+
+func (s *ApiServer) handleGetShipmentHistoryByCustomerName(w http.ResponseWriter, r *http.Request) {
+
+	vars := mux.Vars(r)
+	customerName, ok := vars["customer_name"]
+	if !ok || customerName == "" {
+		http.Error(w, "Customer name is required", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch the order history from the store
+	shipment, err := s.Store.GetShipmentByName(customerName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error fetching order history: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Encode the orders as JSON and send as response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(shipment)
+}
