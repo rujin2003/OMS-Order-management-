@@ -29,6 +29,7 @@ func (s *ApiServer) handlePostShipment(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "shipment processed successfully"})
 }
 
+
 func (s *ApiServer) handleGetAllShipments(w http.ResponseWriter, r *http.Request) {
 	shipments, err := s.Store.GetAllShipments()
 	if err != nil {

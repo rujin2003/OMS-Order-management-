@@ -60,3 +60,44 @@ func makeHandler(fn apiFunc) http.HandlerFunc {
 		}
 	}
 }
+
+func (s *ApiServer) verifyJWTToken(tokenString string) error {
+
+	exists, err := s.Store.IsKeyInStorage(tokenString)
+	if err != nil {
+		return fmt.Errorf("error checking key in storage: %s", err.Error())
+	}
+
+	if !exists {
+		return fmt.Errorf("invalid or expired key")
+	}
+
+	return nil
+}
+
+func makeJWTHandler(fn apiFunc, s *ApiServer) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, `{"error": "Missing Authorization header"}`, http.StatusUnauthorized)
+			return
+		}
+
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			http.Error(w, `{"error": "Invalid Authorization header format"}`, http.StatusUnauthorized)
+			return
+		}
+
+		tokenString := strings.TrimSpace(authHeader[len("Bearer "):])
+		if err := s.verifyJWTToken(tokenString); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusUnauthorized)
+			return
+		}
+
+		if err := fn(w, r); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+		}
+	}
+}

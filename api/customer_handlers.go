@@ -74,8 +74,15 @@ func (s *ApiServer) getAllCustomers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Error fetching customers: %v", err), http.StatusInternalServerError)
 		return
 	}
+
+	if customers == nil {
+		customers = []models.Customer{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(customers)
 }
+
 func (s *ApiServer) getCustumerCount(w http.ResponseWriter, r *http.Request) {
 	count, err := s.Store.CountCustumer()
 	if err != nil {

@@ -7,11 +7,12 @@ func (s *PostgresStorage) Init() error {
 			CREATE TABLE IF NOT EXISTS customers (
 		id SERIAL PRIMARY KEY,
 		name VARCHAR(100) NOT NULL UNIQUE,
-		number BIGINT,
+		number VARCHAR(20),
 		email VARCHAR(150),
 		country VARCHAR(100),
 		address TEXT
 	);
+
 
 	CREATE TABLE IF NOT EXISTS orders (
 		id SERIAL PRIMARY KEY,
@@ -47,14 +48,16 @@ func (s *PostgresStorage) Init() error {
 		id SERIAL PRIMARY KEY,
 		order_id INT REFERENCES orders(id) ON DELETE CASCADE,
 		shipped_date DATE,
-		items INT[] -- Array of item IDs for shipped items
+		due_order_type BOOLEAN,
+		items INT[]
 	);
 	`)
 
 	return err
 }
+
 func NewPostgresStorage() (*PostgresStorage, error) {
-	psqlInfo := "host=localhost port=5432 user=postgres password=password dbname=order_management sslmode=disable"
+	psqlInfo := "host=localhost port=5432 user=postgres password=postgres dbname=postgres sslmode=disable"
 	db, err := sql.Open("postgres", psqlInfo)
 	if err != nil {
 		return nil, err

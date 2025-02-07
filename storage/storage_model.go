@@ -5,7 +5,7 @@ import (
 )
 
 type Storage interface {
-	CreateCustomer(name string, number int, email string, country string, address string) (int, error)
+	CreateCustomer(name string, number string, email string, country string, address string) (int, error)
 
 	EditCustumerDetails(custumer models.Customer) error
 
@@ -24,6 +24,10 @@ type Storage interface {
 	GetTotalOrderValueByCustomerName(customerName string) (float64, error)
 	GetOrderCountByCustomerName(customerName string) (int, error)
 	GetPendingOrderCount() (int, error)
+	GetLatestOrderID() (int, error)
+	GetOrdersByNameAndDate(customerName string, orderDate string) ([]models.Order, error)
+	TotalOrderCount() (int, error)
+	GetRecentOrders(limit int) ([]models.Order, error)
 
 	//Shipement
 	DeleteShipment(shipmentID int) error
@@ -36,4 +40,11 @@ type Storage interface {
 	GetTotalSalesForShippedOrders() (float64, error)
 	GetTotalSalesForShippedOrdersByCustomer(customerName string) (float64, error)
 	GetShipmentByName(customerName string) ([]models.Shipment, error)
+
+	// Auth user
+	VerifyOtp(user models.AuthUser) (bool, error)
+	IsUserExists(email string) (bool, error)
+	AddOtp(user models.AuthUser) error
+	AddAuthUser(user models.AuthUser) error
+	IsKeyInStorage(token string) (bool, error)
 }

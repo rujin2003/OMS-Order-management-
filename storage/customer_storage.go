@@ -49,7 +49,7 @@ func (s *PostgresStorage) GetCustomerByID(id string) (*models.Customer, error) {
 	return &customer, nil
 }
 
-func (s *PostgresStorage) CreateCustomer(name string, number int, email string, country string, address string) (int, error) {
+func (s *PostgresStorage) CreateCustomer(name string, number string, email string, country string, address string) (int, error) {
 	var id int
 	query := `
 		INSERT INTO customers (name, number, email, country, address)

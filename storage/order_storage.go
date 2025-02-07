@@ -2,9 +2,20 @@ package storage
 
 import (
 	"AAHAOMS/OMS/models"
+	"database/sql"
 	"fmt"
 	"log"
 )
+
+func (s *PostgresStorage) getOrderStatus(tx *sql.Tx, orderID int) (string, error) {
+	var orderStatus string
+	err := tx.QueryRow(`SELECT order_status FROM orders WHERE id = $1`, orderID).Scan(&orderStatus)
+	if err != nil {
+		log.Printf("Invalid order ID: %v", err)
+		return "", fmt.Errorf("invalid order ID: %v", err)
+	}
+	return orderStatus, nil
+}
 
 func (s *PostgresStorage) GetTotalSalesForShippedOrders() (float64, error) {
 	query := `
@@ -38,20 +49,34 @@ func (s *PostgresStorage) GetTotalSalesForShippedOrdersByCustomer(customerName s
 	return totalSales, nil
 }
 
+func (s *PostgresStorage) TotalOrderCount() (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM orders
+	`
+	var totalCount int
+	err := s.DB.QueryRow(query).Scan(&totalCount)
+	if err != nil {
+		log.Printf("Error executing query: %v", err)
+		return 0, err
+	}
+	log.Printf("Query executed successfully. Total order count: %d", totalCount)
+	return totalCount, nil
+}
+
 func (s *PostgresStorage) CreateOrder(order models.Order) (int, error) {
 	if order.OrderStatus == "" {
 		order.OrderStatus = "pending"
 	}
 
 	query := `
-		INSERT INTO orders (id, customer_id, customer_name, order_date, shipment_due, shipment_address, order_status, total_price, no_of_items)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO orders (customer_id, customer_name, order_date, shipment_due, shipment_address, order_status, total_price, no_of_items)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id
 	`
 	var orderID int
 	err := s.DB.QueryRow(
 		query,
-		order.ID, // Pass the provided ID
 		order.CustomerID,
 		order.CustomerName,
 		order.OrderDate,
@@ -65,19 +90,62 @@ func (s *PostgresStorage) CreateOrder(order models.Order) (int, error) {
 		return 0, err
 	}
 
-	// Insert items for this order
 	for _, item := range order.Items {
-		query = `
+		itemQuery := `
 			INSERT INTO order_items (order_id, name, size, color, price, quantity)
 			VALUES ($1, $2, $3, $4, $5, $6)
+			RETURNING id
 		`
-		_, err = s.DB.Exec(query, orderID, item.Name, item.Size, item.Color, item.Price, item.Quantity)
+		var itemID int
+		err = s.DB.QueryRow(itemQuery, orderID, item.Name, item.Size, item.Color, item.Price, item.Quantity).Scan(&itemID)
 		if err != nil {
 			return 0, err
 		}
+		item.ID = itemID // Assign the auto-generated ID back to the item struct
 	}
 
 	return orderID, nil
+}
+
+func (s *PostgresStorage) GetTotalOrderCount() (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM orders
+	`
+	var totalCount int
+	err := s.DB.QueryRow(query).Scan(&totalCount)
+	if err != nil {
+		log.Printf("Error executing query: %v", err)
+		return 0, err
+	}
+	log.Printf("Query executed successfully. Total order count: %d", totalCount)
+	return totalCount, nil
+}
+
+func (s *PostgresStorage) GetLatestOrderID() (int, error) {
+	query := `
+		SELECT id
+		FROM orders
+		ORDER BY order_date DESC
+		LIMIT 1
+	`
+	var latestOrderID int
+	err := s.DB.QueryRow(query).Scan(&latestOrderID)
+
+	// If no rows are found, return 0 instead of an error
+	if err == sql.ErrNoRows {
+		log.Println("No orders found. Returning 0 as latest order ID.")
+		return 0, nil
+	}
+
+	// Handle other possible errors
+	if err != nil {
+		log.Printf("Error fetching latest order ID: %v", err)
+		return 0, err
+	}
+
+	log.Printf("Latest order ID: %d", latestOrderID)
+	return latestOrderID, nil
 }
 
 func (s *PostgresStorage) GetOrderHistoryByCustomerName(name string) ([]models.Order, error) {
@@ -303,4 +371,186 @@ func (s *PostgresStorage) GetPendingOrderCount() (int, error) {
 	}
 	log.Printf("Query executed successfully. Pending order count: %d", pendingCount)
 	return pendingCount, nil
+}
+
+func (s *PostgresStorage) GetOrdersByNameAndDate(customerName, orderDate string) ([]models.Order, error) {
+	query := `
+		SELECT id, customer_id, customer_name, order_date, shipment_due, shipment_address, order_status, total_price, no_of_items
+		FROM orders
+		WHERE customer_name ILIKE $1 AND order_date = $2
+	`
+
+	rows, err := s.DB.Query(query, "%"+customerName+"%", orderDate)
+	if err != nil {
+		return nil, fmt.Errorf("query error: %w", err)
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for rows.Next() {
+		var order models.Order
+		err = rows.Scan(
+			&order.ID, &order.CustomerID, &order.CustomerName, &order.OrderDate, &order.ShipmentDue,
+			&order.ShipmentAddress, &order.OrderStatus, &order.TotalPrice, &order.NoOfItems,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("row scan error: %w", err)
+		}
+
+		itemQuery := `
+			SELECT id, name, size, color, price, quantity
+			FROM order_items
+			WHERE order_id = $1
+		`
+		itemRows, err := s.DB.Query(itemQuery, order.ID)
+		if err != nil {
+			return nil, fmt.Errorf("item query error: %w", err)
+		}
+		defer itemRows.Close()
+
+		var items []models.Item
+		for itemRows.Next() {
+			var item models.Item
+			err = itemRows.Scan(&item.ID, &item.Name, &item.Size, &item.Color, &item.Price, &item.Quantity)
+			if err != nil {
+				return nil, fmt.Errorf("item scan error: %w", err)
+			}
+			items = append(items, item)
+		}
+		order.Items = items
+		orders = append(orders, order)
+	}
+
+	return orders, nil
+}
+
+func (s *PostgresStorage) GetRecentOrders(limit int) ([]models.Order, error) {
+	query := `
+		SELECT id, customer_id, customer_name, order_date, shipment_due, shipment_address, order_status, total_price, no_of_items
+		FROM orders
+		ORDER BY order_date DESC
+		LIMIT $1
+	`
+	rows, err := s.DB.Query(query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch recent orders: %w", err)
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for rows.Next() {
+		var order models.Order
+		err = rows.Scan(
+			&order.ID, &order.CustomerID, &order.CustomerName, &order.OrderDate, &order.ShipmentDue,
+			&order.ShipmentAddress, &order.OrderStatus, &order.TotalPrice, &order.NoOfItems,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan order: %w", err)
+		}
+
+		// Fetch items for the order
+		itemQuery := `
+			SELECT id, name, size, color, price, quantity
+			FROM order_items
+			WHERE order_id = $1
+		`
+		itemRows, err := s.DB.Query(itemQuery, order.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch order items: %w", err)
+		}
+		defer itemRows.Close()
+
+		var items []models.Item
+		for itemRows.Next() {
+			var item models.Item
+			err = itemRows.Scan(&item.ID, &item.Name, &item.Size, &item.Color, &item.Price, &item.Quantity)
+			if err != nil {
+				return nil, fmt.Errorf("failed to scan order item: %w", err)
+			}
+			items = append(items, item)
+		}
+		order.Items = items
+		orders = append(orders, order)
+	}
+
+	return orders, nil
+}
+
+func (s *PostgresStorage) GetCompletedShipments() ([]models.Shipment, error) {
+	query := `
+		SELECT s.id, s.order_id, s.shipped_date::DATE, s.items::int[], s.due_order_type
+		FROM shipments s
+		INNER JOIN orders o ON s.order_id = o.id
+		WHERE o.order_status = 'shipped'
+	`
+
+	rows, err := s.DB.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve completed shipments: %v", err)
+	}
+	defer rows.Close()
+
+	return s.parseShipments(rows)
+}
+func (s *PostgresStorage) DeleteShipment(shipmentID int) error {
+
+	var orderID int
+	getOrderQuery := `SELECT order_id FROM shipments WHERE id = $1`
+	err := s.DB.QueryRow(getOrderQuery, shipmentID).Scan(&orderID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("shipment ID %d not found", shipmentID)
+		}
+		return fmt.Errorf("failed to fetch order ID for shipment ID %d: %v", shipmentID, err)
+	}
+
+	deleteShipmentQuery := `DELETE FROM shipments WHERE id = $1`
+	_, err = s.DB.Exec(deleteShipmentQuery, shipmentID)
+	if err != nil {
+		return fmt.Errorf("failed to delete shipment ID %d: %v", shipmentID, err)
+	}
+
+	updateOrderQuery := `UPDATE orders SET order_status = 'pending' WHERE id = $1`
+	_, err = s.DB.Exec(updateOrderQuery, orderID)
+	if err != nil {
+		return fmt.Errorf("failed to reset order status for order ID %d: %v", orderID, err)
+	}
+
+	return nil
+}
+func (s *PostgresStorage) GetShippedButPendingShipments() ([]models.Shipment, error) {
+	query := `
+		SELECT s.id, s.order_id, s.shipped_date::DATE, s.items::int[], s.due_order_type
+		FROM shipments s
+		INNER JOIN orders o ON s.order_id = o.id
+		WHERE o.order_status = 'shipped and due'
+	`
+
+	rows, err := s.DB.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve shipped but pending shipments: %v", err)
+	}
+	defer rows.Close()
+
+	return s.parseShipments(rows)
+}
+
+func (s *PostgresStorage) getOrderItems(tx *sql.Tx, orderID int) (map[int]models.Item, error) {
+	rows, err := tx.Query(`SELECT id, name, quantity FROM order_items WHERE order_id = $1`, orderID)
+	if err != nil {
+		log.Printf("Error fetching order items: %v", err)
+		return nil, fmt.Errorf("failed to fetch order items: %v", err)
+	}
+	defer rows.Close()
+
+	orderItems := make(map[int]models.Item)
+	for rows.Next() {
+		var item models.Item
+		if err := rows.Scan(&item.ID, &item.Name, &item.Quantity); err != nil {
+			log.Printf("Error scanning order item: %v", err)
+			return nil, fmt.Errorf("failed to scan order item: %v", err)
+		}
+		orderItems[item.ID] = item
+	}
+	return orderItems, nil
 }
