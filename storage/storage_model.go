@@ -40,6 +40,7 @@ type Storage interface {
 	GetTotalSalesForShippedOrders() (float64, error)
 	GetTotalSalesForShippedOrdersByCustomer(customerName string) (float64, error)
 	GetShipmentByName(customerName string) ([]models.Shipment, error)
+	GetShipmentByID(shipmentID int) (*models.Shipment, error)
 
 	// Auth user
 	VerifyOtp(user models.AuthUser) (bool, error)

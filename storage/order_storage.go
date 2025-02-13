@@ -17,37 +17,7 @@ func (s *PostgresStorage) getOrderStatus(tx *sql.Tx, orderID int) (string, error
 	return orderStatus, nil
 }
 
-func (s *PostgresStorage) GetTotalSalesForShippedOrders() (float64, error) {
-	query := `
-		SELECT COALESCE(SUM(o.total_price), 0) AS total_sales
-		FROM orders o
-		WHERE TRIM(o.order_status) = 'shipped'
-	`
-	var totalSales float64
-	err := s.DB.QueryRow(query).Scan(&totalSales)
-	if err != nil {
-		log.Printf("Error calculating total sales for shipped orders: %v", err)
-		return 0, err
-	}
-	log.Printf("Total sales for shipped orders: %f", totalSales)
-	return totalSales, nil
-}
 
-func (s *PostgresStorage) GetTotalSalesForShippedOrdersByCustomer(customerName string) (float64, error) {
-	query := `
-		SELECT COALESCE(SUM(o.total_price), 0) AS total_sales
-		FROM orders o
-		WHERE TRIM(o.order_status) = 'shipped' AND TRIM(o.customer_name) ILIKE $1
-	`
-	var totalSales float64
-	err := s.DB.QueryRow(query, "%"+customerName+"%").Scan(&totalSales)
-	if err != nil {
-		log.Printf("Error calculating total sales for shipped orders by customer %s: %v", customerName, err)
-		return 0, err
-	}
-	log.Printf("Total sales for shipped orders by customer %s: %f", customerName, totalSales)
-	return totalSales, nil
-}
 
 func (s *PostgresStorage) TotalOrderCount() (int, error) {
 	query := `
@@ -534,6 +504,7 @@ func (s *PostgresStorage) GetShippedButPendingShipments() ([]models.Shipment, er
 
 	return s.parseShipments(rows)
 }
+
 
 func (s *PostgresStorage) getOrderItems(tx *sql.Tx, orderID int) (map[int]models.Item, error) {
 	rows, err := tx.Query(`SELECT id, name, quantity FROM order_items WHERE order_id = $1`, orderID)

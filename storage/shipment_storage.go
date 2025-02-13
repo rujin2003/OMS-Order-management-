@@ -10,8 +10,6 @@ import (
 	"github.com/lib/pq"
 )
 
-
-
 // Handle a new shipment transactionally
 func (s *PostgresStorage) HandleShipment(shipment models.Shipment) error {
 	tx, err := s.DB.Begin()
@@ -221,7 +219,6 @@ func (s *PostgresStorage) GetShipmentByName(customerName string) ([]models.Shipm
 	return s.parseShipments(rows)
 }
 
-
 // Parse shipments from SQL rows
 func (s *PostgresStorage) parseShipments(rows *sql.Rows) ([]models.Shipment, error) {
 	var shipments []models.Shipment
@@ -309,4 +306,69 @@ func (s *PostgresStorage) GetDueItems(orderID int) ([]DueItem, error) {
 type DueItem struct {
 	ItemID   int `json:"item_id"`
 	Quantity int `json:"quantity"`
+}
+
+func (s *PostgresStorage) GetTotalSalesForShippedOrders() (float64, error) {
+	query := `
+		SELECT COALESCE(SUM(o.total_price), 0) AS total_sales
+		FROM orders o
+		WHERE TRIM(o.order_status) = 'shipped'
+	`
+	var totalSales float64
+	err := s.DB.QueryRow(query).Scan(&totalSales)
+	if err != nil {
+
+		return 0, err
+	}
+
+	return totalSales, nil
+}
+
+func (s *PostgresStorage) GetTotalSalesForShippedOrdersByCustomer(customerName string) (float64, error) {
+	query := `
+		SELECT COALESCE(SUM(o.total_price), 0) AS total_sales
+		FROM orders o
+		WHERE TRIM(o.order_status) = 'shipped' AND TRIM(o.customer_name) ILIKE $1
+	`
+	var totalSales float64
+	err := s.DB.QueryRow(query, "%"+customerName+"%").Scan(&totalSales)
+	if err != nil {
+
+		return 0, err
+	}
+	log.Printf(" by customer %s: %f", customerName, totalSales)
+	return totalSales, nil
+}
+
+// In storage/postgres.go
+
+func (s *PostgresStorage) GetShipmentByID(shipmentID int) (*models.Shipment, error) {
+	query := `
+        SELECT s.id, s.order_id, s.shipped_date::DATE, s.items::int[], s.due_order_type
+        FROM shipments s
+        WHERE s.id = $1
+    `
+
+	row := s.DB.QueryRow(query, shipmentID)
+
+	var shipment models.Shipment
+	var shippedDate string
+	var itemIDs pq.Int64Array
+
+	err := row.Scan(&shipment.ID, &shipment.OrderID, &shippedDate, &itemIDs, &shipment.DueOrderType)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("shipment not found")
+		}
+		return nil, fmt.Errorf("failed to scan shipment row: %v", err)
+	}
+
+	shipment.ShippedDate = shippedDate
+
+	shipment.Items, err = s.getItemDetails(itemIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	return &shipment, nil
 }

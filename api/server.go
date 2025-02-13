@@ -110,7 +110,6 @@ func (s *ApiServer) Start() {
 	router.HandleFunc("/customers/{id}", makeHandler(wrapHandler(s.handleDeleteCustomer))).Methods("DELETE")
 
 	// MARK: Orders
-	
 
 	router.HandleFunc("/orders", makeHandler(wrapHandler(s.handleCreateOrder))).Methods("POST")
 	router.HandleFunc("/orders/{id:[0-9]+}", makeHandler(wrapHandler(s.handleGetOrderByID))).Methods("GET")
@@ -132,6 +131,8 @@ func (s *ApiServer) Start() {
 	router.HandleFunc("/shipments", makeHandler(wrapHandler(s.handlePostShipment))).Methods("POST")
 	router.HandleFunc("/shipments", makeHandler(wrapHandler(s.handleGetAllShipments))).Methods("GET")
 	router.HandleFunc("/shipments/completed", makeHandler(wrapHandler(s.handleGetCompletedShipments))).Methods("GET")
+	router.HandleFunc("/shipments/{id}", makeHandler(wrapHandler(s.handleGetShipmentByID))).Methods("GET")
+	router.HandleFunc("/shipments/{id}/download", s.handleDownloadShipmentExcel).Methods("GET")
 
 	router.HandleFunc("/shipments/shipped-pending", makeHandler(wrapHandler(s.handleGetShippedButPendingShipments))).Methods("GET")
 	router.Handle("/shipments/{customer_name}", makeHandler(wrapHandler(s.handleGetShipmentHistoryByCustomerName))).Methods("GET")
