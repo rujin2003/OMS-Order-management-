@@ -1,6 +1,10 @@
 package storage
 
-import "database/sql"
+import (
+	"database/sql"
+	"fmt"
+	"os"
+)
 
 func (s *PostgresStorage) Init() error {
 	_, err := s.DB.Exec(`
@@ -56,11 +60,40 @@ func (s *PostgresStorage) Init() error {
 	return err
 }
 
+//	func NewPostgresStorage() (*PostgresStorage, error) {
+//		psqlInfo := "host=localhost port=5432 user=postgres password=postgres dbname=postgres sslmode=disable"
+//		db, err := sql.Open("postgres", psqlInfo)
+//		if err != nil {
+//			return nil, err
+//		}
+//		return &PostgresStorage{DB: db}, nil
+
+//	}
+
 func NewPostgresStorage() (*PostgresStorage, error) {
-	psqlInfo := "host=localhost port=5432 user=postgres password=postgres dbname=postgres sslmode=disable"
+
+	host := os.Getenv("POSTGRES_HOST")
+	port := os.Getenv("POSTGRES_PORT")
+	user := os.Getenv("POSTGRES_USER")
+	password := os.Getenv("POSTGRES_PASSWORD")
+	dbname := os.Getenv("POSTGRES_DBNAME")
+	sslmode := os.Getenv("POSTGRES_SSLMODE")
+
+	if host == "" || port == "" || user == "" || password == "" || dbname == "" || sslmode == "" {
+		return nil, fmt.Errorf("one or more required environment variables are not set")
+	}
+
+	psqlInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		host, port, user, password, dbname, sslmode)
+
 	db, err := sql.Open("postgres", psqlInfo)
 	if err != nil {
 		return nil, err
 	}
+
+	if err = db.Ping(); err != nil {
+		return nil, fmt.Errorf("could not ping database: %v", err)
+	}
+
 	return &PostgresStorage{DB: db}, nil
 }
